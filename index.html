@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Geovisor Tranvía Urbano · Armenia</title>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Leaflet (versión fija) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <!-- Font Awesome (íconos) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+    <!-- Tipografía -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Estilos propios -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- =========================================================
+         FASE 5 · PÁGINA DE INICIO (pantalla de bienvenida)
+         ========================================================= -->
+    <section id="inicio" class="inicio">
+        <div class="inicio-contenido">
+
+            <div class="inicio-logos">
+                <img src="img/logo_uniquindio.png" alt="Universidad del Quindío" class="logo-inst"
+                     onerror="this.style.display='none'">
+            </div>
+
+            <span class="inicio-etiqueta">
+                <i class="fa-solid fa-graduation-cap"></i>
+                Ingeniería Topográfica y Geomática · Universidad del Quindío
+            </span>
+
+            <h1>Corredor potencial de tranvía urbano<br><span>Armenia, Quindío</span></h1>
+
+            <p class="inicio-resumen">
+                Análisis espacial y evaluación multicriterio (AHP) para identificar el corredor de mayor
+                aptitud territorial, la localización preliminar de estaciones y sus áreas de influencia.
+            </p>
+
+            <div class="inicio-cifras">
+                <div><strong>5</strong><span>criterios de aptitud</span></div>
+                <div><strong>2</strong><span>restricciones</span></div>
+                <div><strong>10</strong><span>comunas</span></div>
+                <div><strong>324.669</strong><span>habitantes (2025)</span></div>
+            </div>
+
+            <div class="inicio-botones">
+                <button id="btnEntrar" class="btn btn-entrar">
+                    Explorar el geovisor <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+                <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#modalProyecto">
+                    <i class="fa-solid fa-circle-info me-2"></i>Sobre el proyecto
+                </button>
+            </div>
+
+            <p class="inicio-autores">
+                Kely Brigith Tobar Bastidas · Solanyi Steffanny Delgado Becerra<br>
+                Director: Aaron David Fiscal Ladino
+            </p>
+        </div>
+    </section>
+
+
+    <!-- =========================================================
+         FASE 1 · BARRA SUPERIOR
+         ========================================================= -->
+    <nav class="barra-superior">
+
+        <button id="btnPanel" class="btn-icono" title="Mostrar / ocultar panel">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <div class="marca">
+            <img src="img/logo_uniquindio.png" alt="" class="marca-logo" onerror="this.style.display='none'">
+            <i class="fa-solid fa-train-tram marca-icono"></i>
+            <div class="marca-texto">
+                <strong>Tranvía Urbano · Armenia</strong>
+                <small>Geovisor del análisis multicriterio</small>
+            </div>
+        </div>
+
+        <!-- FASE 3 · BUSCADOR -->
+        <div class="buscador">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="txtBuscar" type="search" autocomplete="off"
+                   placeholder="Buscar estación, comuna, equipamiento o dirección…">
+            <div id="resultadosBusqueda" class="resultados-busqueda"></div>
+        </div>
+
+        <div class="acciones">
+            <button class="btn-icono" id="btnInicio" title="Página de inicio">
+                <i class="fa-solid fa-house"></i>
+            </button>
+            <button class="btn-icono" data-bs-toggle="modal" data-bs-target="#modalProyecto" title="Información del proyecto">
+                <i class="fa-solid fa-circle-info"></i>
+            </button>
+        </div>
+    </nav>
+
+
+    <!-- =========================================================
+         CONTENEDOR PRINCIPAL: PANEL LATERAL + MAPA
+         ========================================================= -->
+    <main class="contenedor">
+
+        <!-- FASE 5 · PANEL LATERAL -->
+        <aside id="panel" class="panel">
+
+            <ul class="nav nav-tabs pestanas" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabCapas" type="button">
+                        <i class="fa-solid fa-layer-group"></i> Capas
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabLeyenda" type="button">
+                        <i class="fa-solid fa-list"></i> Leyenda
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabModelo" type="button">
+                        <i class="fa-solid fa-scale-balanced"></i> Modelo
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content panel-cuerpo">
+
+                <!-- Pestaña CAPAS -->
+                <div class="tab-pane fade show active" id="tabCapas">
+                    <h6 class="titulo-seccion">Mapa base</h6>
+                    <div id="panelMapasBase" class="mapas-base"></div>
+
+                    <h6 class="titulo-seccion">Capas temáticas</h6>
+                    <div id="panelCapas"></div>
+                </div>
+
+                <!-- Pestaña LEYENDA (dinámica) -->
+                <div class="tab-pane fade" id="tabLeyenda">
+                    <h6 class="titulo-seccion">Leyenda de capas visibles</h6>
+                    <div id="panelLeyenda"></div>
+                </div>
+
+                <!-- Pestaña MODELO (AHP) -->
+                <div class="tab-pane fade" id="tabModelo">
+                    <h6 class="titulo-seccion">Pesos AHP de los criterios</h6>
+                    <div id="panelPesos"></div>
+                    <div class="consistencia">
+                        <div><span>CI</span><strong>0,001</strong></div>
+                        <div><span>RI</span><strong>1,188</strong></div>
+                        <div><span>CR</span><strong>0,0009</strong></div>
+                    </div>
+                    <p class="nota">CR &lt; 0,10: la matriz de comparación pareada es consistente.
+                        Las restricciones y variables complementarias no se ponderan.</p>
+
+                    <h6 class="titulo-seccion">Densidad poblacional por comuna</h6>
+                    <div id="panelDensidad"></div>
+                    <p class="nota">Fuente: proyección de población 2025, Ficha Básica Municipal de Armenia.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAPA -->
+        <section class="mapa-contenedor">
+            <div id="map"></div>
+
+            <!-- FASE 3 · BARRA DE ESTADO: coordenadas -->
+            <div class="barra-estado">
+                <span><i class="fa-solid fa-crosshairs"></i> <span id="coordGeo">—</span></span>
+                <span class="d-none d-md-inline">MAGNA-SIRGAS Origen Nacional (EPSG:9377):
+                    <span id="coordPlanas">—</span></span>
+                <span>Zoom <span id="nivelZoom">—</span></span>
+            </div>
+
+            <!-- Aviso de medición -->
+            <div id="avisoMedicion" class="aviso-medicion"></div>
+        </section>
+    </main>
+
+
+    <!-- =========================================================
+         FASE 5 · INFORMACIÓN DEL PROYECTO (ventana modal)
+         ========================================================= -->
+    <div class="modal fade" id="modalProyecto" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-train-tram me-2"></i>Sobre el proyecto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Análisis espacial y evaluación multicriterio para la identificación de un corredor
+                        potencial de tranvía urbano en Armenia, Quindío</h6>
+                    <p class="text-muted mb-3">
+                        Estudiantes: Kely Brigith Tobar Bastidas, Solanyi Steffanny Delgado Becerra ·
+                        Director: Aaron David Fiscal Ladino · Universidad del Quindío
+                    </p>
+
+                    <p><strong>Pregunta de investigación.</strong> ¿Cuál es el corredor urbano de Armenia con mayor
+                        aptitud territorial para la implementación de un sistema de tranvía urbano, a partir de un
+                        análisis espacial multicriterio?</p>
+
+                    <p><strong>Metodología.</strong></p>
+                    <ol class="metodologia">
+                        <li>Preparación de las capas temáticas.</li>
+                        <li>Homologación del sistema de referencia (MAGNA-SIRGAS Origen Nacional, EPSG:9377) y delimitación del área urbana.</li>
+                        <li>Mapas de los parámetros a evaluar.</li>
+                        <li>Ponderación de criterios mediante AHP (panel de 8 expertos).</li>
+                        <li>Estandarización de variables (normalización lineal 0–10 y reclasificación).</li>
+                        <li>Superposición ponderada (WLC) y mapa de aptitud territorial.</li>
+                        <li>Ruta de menor costo (Dijkstra) sobre la superficie de costo acumulado.</li>
+                        <li>Localización preliminar de estaciones.</li>
+                        <li>Áreas de influencia de 500 m y 1 km y población potencialmente beneficiada.</li>
+                    </ol>
+
+                    <p><strong>Fuentes.</strong> DANE, SIG Armenia, SIG Quindío, ASTER GDEM v3 (NASA Earth Data),
+                        Colombia en Mapas, SINAP y OpenStreetMap (descarga 10/09/2026). Clasificación del suelo según
+                        el POT, Acuerdo 019 de 2009.</p>
+
+                    <div class="alert alert-warning small mb-0">
+                        Los resultados son preliminares y de carácter académico. La población dentro de las áreas
+                        de influencia se estima por ponderación areal a partir de la densidad por comuna.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- =========================================================
+         LIBRERÍAS JS
+         ========================================================= -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Turf: buffers, áreas, intersecciones -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <!-- proj4: coordenadas planas EPSG:9377 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+
+    <!-- Código propio -->
+    <script src="script.js"></script>
+
+</body>
+
+</html>
