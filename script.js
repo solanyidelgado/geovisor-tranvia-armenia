@@ -478,7 +478,10 @@ const CAPAS = [
         id: 'corredor', grupo: 'resultados', nombre: 'Corredor potencial',
         archivo: 'corredor.geojson', z: 460, visible: true,
         crear: crearCorredor,
-        leyenda: [{ tipo: 'linea', color: '#0b4d2c', etiqueta: 'Corredor de menor costo', grosor: 6 }]
+        leyenda: [
+            { tipo: 'linea', color: '#0b4d2c', etiqueta: 'Corredor de menor costo', grosor: 6 },
+            { tipo: 'tren', etiqueta: 'Tranvía en recorrido' }
+        ]
     },
     {
         id: 'estaciones', grupo: 'resultados', nombre: 'Estaciones propuestas',
@@ -671,6 +674,9 @@ function simboloHTML(item) {
                         <i class="fa-solid ${item.icono}"></i></span>`;
         }
         return `<span class="simbolo punto" style="background:${item.color}"></span>`;
+    }
+    if (item.tipo === 'tren') {
+        return `<img src="img/tren.png" alt="" style="width:26px;height:26px;flex-shrink:0">`;
     }
     if (item.tipo === 'estacion') {
         return `<span class="icono-estacion" style="width:20px;height:20px;font-size:9px;animation:none;margin:0 1px">
@@ -1019,8 +1025,21 @@ document.addEventListener('click', e => {
    FASE 4 · RESULTADOS
    ============================================================ */
 
+// Las estaciones se llaman "Estación 1" … "Estación 10", numeradas de sur a norte
 function nombreEstacion(f, i) {
+    if (f.properties && f.properties._numero) return `Estación ${f.properties._numero}`;
     return campo(f.properties, ['NOMBRE', 'Nombre', 'name', 'ESTACION']) || `Estación ${i + 1}`;
+}
+
+// Numera las estaciones de sur a norte (de menor a mayor latitud)
+function numerarEstaciones(datos) {
+    const puntos = (datos.features || []).filter(f => f.geometry && f.geometry.type === 'Point');
+    [...puntos]
+        .sort((a, b) => a.geometry.coordinates[1] - b.geometry.coordinates[1])
+        .forEach((f, k) => {
+            f.properties = f.properties || {};
+            f.properties._numero = k + 1;
+        });
 }
 
 /* ---------- Corredor (línea con animación de flujo) ---------- */
@@ -1035,11 +1054,108 @@ function crearCorredor(capa, datos) {
         interactive: false,
         style: { color: '#f2b705', weight: 3, className: 'corredor-animado' }
     });
-    return L.layerGroup([base, flujo]);
+    const tren = crearTren(datos);
+    return L.layerGroup(tren ? [base, flujo, tren] : [base, flujo]);
+}
+
+/* ---------- Tren animado que recorre el corredor (ida y vuelta) ----------
+   Arranca en el extremo sur, para 1 segundo en cada estación y en los extremos,
+   y se devuelve.                                                              */
+map.createPane('paneTren').style.zIndex = 490;      // por encima del corredor y las estaciones
+
+const SEGUNDOS_POR_KM = 6;                          // velocidad: súbalo para que vaya más lento
+const PAUSA_ESTACION_MS = 1000;                     // tiempo detenido en cada estación
+const DIST_MAX_ESTACION_KM = 0.15;                  // estación a menos de 150 m de la línea = parada
+
+function crearTren(datos) {
+    // Une las líneas del corredor en una sola
+    let coords = [];
+    turf.flattenEach(datos, f => {
+        if (f.geometry && f.geometry.type === 'LineString') {
+            coords = coords.concat(coords.length ? f.geometry.coordinates.slice(1) : f.geometry.coordinates);
+        }
+    });
+    if (coords.length < 2) return null;
+
+    // Arranca por el extremo sur (menor latitud) para ir de sur a norte
+    if (coords[0][1] > coords[coords.length - 1][1]) coords.reverse();
+
+    const linea = turf.lineString(coords);
+    const largo = turf.length(linea, { units: 'kilometers' });
+    const msPorKm = Math.max(SEGUNDOS_POR_KM * 1000, 15000 / largo);   // mínimo 15 s por recorrido
+
+    const marcador = L.marker([coords[0][1], coords[0][0]], {
+        pane: 'paneTren',
+        interactive: false,
+        icon: L.divIcon({
+            className: '',
+            html: '<img src="img/tren.png" class="icono-tren-img" alt="Tren">',
+            iconSize: [44, 44],
+            iconAnchor: [22, 22]
+        })
+    });
+
+    // Itinerario: tramos de movimiento y pausas, de sur a norte y de regreso
+    let itinerario = [], cicloMs = 1, conParadas = false;
+
+    function armarItinerario() {
+        const est = capaPorId('estaciones');
+        let paradas = [];
+        if (est && est.datos) {
+            conParadas = true;
+            est.datos.features.forEach(f => {
+                if (!f.geometry || f.geometry.type !== 'Point') return;
+                const p = turf.nearestPointOnLine(linea, f, { units: 'kilometers' });
+                if (p.properties.dist <= DIST_MAX_ESTACION_KM) paradas.push(p.properties.location);
+            });
+        }
+        // Puntos de parada en orden: extremo sur, estaciones, extremo norte
+        const puntos = [0, ...paradas.filter(d => d > 0.01 && d < largo - 0.01).sort((a, b) => a - b), largo];
+        const ida = [];
+        for (let k = 0; k < puntos.length; k++) {
+            ida.push({ desde: puntos[k], hasta: puntos[k], ms: PAUSA_ESTACION_MS });           // pausa
+            if (k < puntos.length - 1) {
+                ida.push({ desde: puntos[k], hasta: puntos[k + 1], ms: (puntos[k + 1] - puntos[k]) * msPorKm });
+            }
+        }
+        // El regreso es la ida al revés
+        const vuelta = [...ida].reverse().map(t => ({ desde: t.hasta, hasta: t.desde, ms: t.ms }));
+        itinerario = [];
+        let t = 0;
+        // Se quita la primera pausa de cada sentido para que en los extremos no pare dos veces
+        [...ida.slice(1), ...vuelta.slice(1)].forEach(tr => { itinerario.push({ ...tr, t0: t }); t += tr.ms; });
+        cicloMs = t;
+    }
+    armarItinerario();
+
+    function distanciaEn(ms) {
+        const tc = ms % cicloMs;
+        const tr = itinerario.find(x => tc < x.t0 + x.ms) || itinerario[itinerario.length - 1];
+        const f = tr.ms ? (tc - tr.t0) / tr.ms : 1;
+        return tr.desde + (tr.hasta - tr.desde) * Math.min(Math.max(f, 0), 1);
+    }
+
+    let inicio = null;
+    function paso(t) {
+        if (!conParadas && capaPorId('estaciones').datos) {   // las estaciones cargan después
+            armarItinerario();
+            inicio = null;                                     // reinicia el recorrido sin saltos
+        }
+        if (map.hasLayer(marcador)) {               // solo se mueve si el corredor está encendido
+            if (inicio === null) inicio = t;
+            const p = turf.along(linea, distanciaEn(t - inicio), { units: 'kilometers' });
+            const [lng, lat] = p.geometry.coordinates;
+            marcador.setLatLng([lat, lng]);
+        }
+        requestAnimationFrame(paso);
+    }
+    requestAnimationFrame(paso);
+    return marcador;
 }
 
 /* ---------- Estaciones (marcador con pulso) ---------- */
 function crearEstaciones(capa, datos) {
+    numerarEstaciones(datos);
     let i = 0;
     return L.geoJSON(datos, {
         pointToLayer: (f, latlng) => L.marker(latlng, {
@@ -1185,7 +1301,7 @@ const fmtM = v => (v === undefined) ? undefined : formatoDistancia(v);
 function popupEstacion(f) {
     const s = f.properties._stats || {};
     const nombre = s.nombre || nombreEstacion(f, f.properties._indice ?? 0);
-    return popupHTML(nombre, s.orden ? `Estación ${s.orden} del corredor` : 'Estación propuesta (preliminar)', [
+    return popupHTML(nombre, 'Estación propuesta (preliminar)', [
         ['Población a 500 m', fmtPob(s.pob500)],
         ['Población a 1 km', fmtPob(s.pob1000)],
         ['Equipamientos a 500 m', fmtEq(s.eq500)],
