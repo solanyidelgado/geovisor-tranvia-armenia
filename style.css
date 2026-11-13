@@ -607,3 +607,13 @@ body {
     box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
     flex-shrink: 0;
 }
+
+/* ============================================================
+   Tren animado sobre el corredor (imagen img/tren.png)
+   ============================================================ */
+.icono-tren-img {
+    width: 44px;
+    height: 44px;
+    display: block;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45));
+}
