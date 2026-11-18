@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vista 3D · Tranvía Urbano Armenia</title>
+
+    <!-- MapLibre GL (mapa 3D con relieve) -->
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <!-- Íconos y tipografía (los mismos del geovisor 2D) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --verde-900: #0b4d2c;
+            --verde-700: #13693b;
+            --verde-500: #2e9e5b;
+            --verde-100: #e7f5ec;
+            --acento: #f2b705;
+            --texto: #1d2b24;
+            --texto-2: #5b6b63;
+            --borde: #dfe7e2;
+            --fondo: #f6f8f7;
+            --sombra: 0 6px 24px rgba(11, 77, 44, .18);
+            --alto-barra: 60px;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            height: 100%;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: var(--texto);
+            overflow: hidden;
+            background: #dfe7e2;
+        }
+
+        /* ---------- Barra superior ---------- */
+        .barra {
+            height: var(--alto-barra);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 14px;
+            background: var(--verde-900);
+            color: #fff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .2);
+            position: relative;
+            z-index: 10;
+        }
+
+        .barra img { height: 36px; background: #fff; border-radius: 6px; padding: 2px; }
+        .barra .icono { font-size: 1.4rem; color: var(--acento); }
+        .barra .texto { display: flex; flex-direction: column; line-height: 1.15; }
+        .barra .texto small { opacity: .75; font-size: .72rem; }
+
+        .btn-barra {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 38px;
+            padding: 0 14px;
+            border-radius: 8px;
+            border: none;
+            font: inherit;
+            font-weight: 600;
+            font-size: .85rem;
+            text-decoration: none;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .btn-panel { background: rgba(255, 255, 255, .12); color: #fff; }
+        .btn-panel:hover { background: rgba(255, 255, 255, .22); }
+        .btn-volver { margin-left: auto; background: var(--acento); color: var(--verde-900); }
+        .btn-volver:hover { background: #ffcb2b; }
+
+        /* ---------- Mapa ---------- */
+        #mapa3d {
+            position: absolute;
+            top: var(--alto-barra);
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        /* ---------- Panel lateral ---------- */
+        .panel3d {
+            position: absolute;
+            top: calc(var(--alto-barra) + 12px);
+            left: 12px;
+            bottom: 36px;
+            z-index: 5;
+            width: 310px;
+            max-width: calc(100vw - 24px);
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: var(--sombra);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: transform .35s ease, opacity .35s ease;
+        }
+
+        .panel3d.cerrado { transform: translateX(calc(-100% - 20px)); opacity: 0; pointer-events: none; }
+
+        .pestanas { display: flex; border-bottom: 1px solid var(--borde); padding: 6px 6px 0; }
+
+        .pestanas button {
+            flex: 1;
+            border: none;
+            background: none;
+            font: inherit;
+            font-size: .82rem;
+            font-weight: 500;
+            color: var(--texto-2);
+            padding: 8px 6px;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+        }
+
+        .pestanas button.activo { color: var(--verde-700); border-bottom-color: var(--verde-500); }
+
+        .cuerpo { overflow-y: auto; padding: 4px 14px 16px; flex: 1; font-size: .84rem; }
+        .seccion { display: none; }
+        .seccion.activa { display: block; }
+
+        .titulo {
+            font-size: .7rem;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--texto-2);
+            font-weight: 600;
+            margin: 14px 0 6px;
+        }
+
+        .opciones { display: flex; gap: 6px; }
+
+        .opciones button,
+        .boton {
+            flex: 1;
+            border: 2px solid var(--borde);
+            background: #fff;
+            border-radius: 8px;
+            padding: 7px 8px;
+            font: inherit;
+            font-size: .8rem;
+            cursor: pointer;
+            color: var(--texto);
+        }
+
+        .opciones button.activo { border-color: var(--verde-700); background: var(--verde-100); font-weight: 600; }
+
+        .boton {
+            width: 100%;
+            margin-top: 6px;
+            background: var(--verde-700);
+            border-color: var(--verde-700);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .boton.secundario { background: #fff; color: var(--verde-900); border-color: var(--borde); }
+        .boton:hover { filter: brightness(1.08); }
+
+        .deslizador { display: flex; align-items: center; gap: 10px; }
+        .deslizador input { flex: 1; accent-color: var(--verde-500); }
+        .deslizador span { width: 38px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: .78rem; }
+
+        /* Grupos y capas */
+        .grupo { border: 1px solid var(--borde); border-radius: 10px; margin-top: 10px; overflow: hidden; }
+
+        .grupo-titulo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 9px 12px;
+            background: var(--fondo);
+            border: none;
+            font: inherit;
+            font-size: .82rem;
+            font-weight: 600;
+            color: var(--verde-900);
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .grupo-titulo .flecha { margin-left: auto; font-size: .7rem; transition: transform .25s; }
+        .grupo-titulo.colapsado .flecha { transform: rotate(-90deg); }
+        .grupo-contenido { padding: 2px 12px 6px; }
+        .grupo-contenido.oculto { display: none; }
+
+        .capa { padding: 7px 0; border-bottom: 1px dashed var(--borde); }
+        .capa:last-child { border-bottom: none; }
+        .capa-fila { display: flex; align-items: center; gap: 8px; }
+        .capa-fila label { flex: 1; cursor: pointer; margin: 0; font-size: .82rem; }
+        .capa-fila input[type=checkbox] { accent-color: var(--verde-700); width: 16px; height: 16px; }
+        .capa .deslizador { padding-left: 24px; margin-top: 3px; }
+        .capa .deslizador input { height: 4px; }
+
+        .estado { font-size: .66rem; padding: 1px 6px; border-radius: 4px; background: #fff3cd; color: #8a6d00; white-space: nowrap; }
+        .estado.error { background: #fde2e1; color: #a12622; }
+
+        /* Leyenda */
+        .leyenda-bloque { margin-top: 12px; }
+        .leyenda-bloque h6 { font-size: .82rem; font-weight: 600; margin: 0 0 5px; }
+        .leyenda-bloque small { color: var(--texto-2); font-weight: 400; }
+        .leyenda-item { display: flex; align-items: center; gap: 10px; padding: 2px 0; font-size: .78rem; }
+        .simbolo { width: 22px; height: 14px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(0, 0, 0, .25); }
+        .simbolo.linea { height: 0; border: none; border-top: 3px solid; border-radius: 0; }
+        .simbolo.columna { width: 14px; height: 18px; border-radius: 2px 2px 0 0; margin: 0 4px; }
+        .linea-corredor { width: 26px; height: 6px; border-radius: 3px; background: var(--verde-900); position: relative; flex-shrink: 0; }
+        .linea-corredor::after { content: ''; position: absolute; left: 0; right: 0; top: 2px; height: 2px; background: var(--acento); }
+        .vacia { color: var(--texto-2); text-align: center; padding: 18px 0; font-size: .82rem; }
+
+        .ayuda { margin-top: 12px; font-size: .72rem; color: var(--texto-2); line-height: 1.45; }
+
+        /* ---------- Marcadores ---------- */
+        .estacion3d {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--acento);
+            border: 3px solid var(--verde-900);
+            color: var(--verde-900);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+            flex-shrink: 0;
+        }
+
+        .leyenda-item .estacion3d { width: 22px; height: 22px; font-size: 10px; border-width: 2px; cursor: default; }
+
+        .icono-equipamiento {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .tren3d { width: 44px; height: 44px; display: block; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .55)); pointer-events: none; }
+        .leyenda-item .tren3d { width: 26px; height: 26px; }
+
+        /* ---------- Ventanas emergentes ---------- */
+        .maplibregl-popup-content { padding: 0; border-radius: 10px; overflow: hidden; min-width: 210px; font-family: 'Inter', sans-serif; }
+        .popup-cabecera { background: var(--verde-700); color: #fff; padding: 10px 14px; font-weight: 600; font-size: .9rem; }
+        .popup-cabecera small { display: block; font-weight: 400; opacity: .8; font-size: .72rem; }
+        .popup-cuerpo { padding: 10px 14px; font-size: .8rem; }
+        .popup-cuerpo table { width: 100%; }
+        .popup-cuerpo td { padding: 3px 0; border-bottom: 1px solid var(--fondo); }
+        .popup-cuerpo td:first-child { color: var(--texto-2); padding-right: 10px; }
+        .popup-cuerpo td:last-child { text-align: right; font-weight: 600; }
+        .popup-cuerpo .nota { font-size: .72rem; color: var(--texto-2); margin: 8px 0 0; }
+        .maplibregl-popup-close-button { color: #fff; font-size: 18px; padding: 2px 8px; }
+
+        /* ---------- Avisos ---------- */
+        .aviso {
+            position: absolute;
+            top: calc(var(--alto-barra) + 12px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 6;
+            background: #fde2e1;
+            color: #a12622;
+            padding: 10px 16px;
+            border-radius: 8px;
+            box-shadow: var(--sombra);
+            font-size: .85rem;
+            display: none;
+            max-width: calc(100vw - 32px);
+        }
+
+        .aviso.visible { display: block; }
+
+        @media (max-width: 768px) {
+            .barra .texto small { display: none; }
+            .btn-barra span { display: none; }
+            .panel3d { width: calc(100vw - 24px); }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Barra superior -->
+    <nav class="barra">
+        <button class="btn-barra btn-panel" id="btnPanel" title="Mostrar / ocultar panel">
+            <i class="fa-solid fa-bars"></i><span>Panel</span>
+        </button>
+        <img src="img/logo_uniquindio.png" alt="" onerror="this.style.display='none'">
+        <i class="fa-solid fa-mountain-sun icono"></i>
+        <div class="texto">
+            <strong>Vista 3D · Tranvía Urbano Armenia</strong>
+            <small>Capas del análisis, corredor y estaciones sobre el relieve</small>
+        </div>
+        <a class="btn-barra btn-volver" href="index.html" title="Volver al geovisor 2D">
+            <i class="fa-solid fa-map"></i><span>Geovisor 2D</span>
+        </a>
+    </nav>
+
+    <div id="mapa3d"></div>
+    <div id="aviso" class="aviso"></div>
+
+    <!-- Panel lateral -->
+    <aside class="panel3d" id="panel">
+        <div class="pestanas">
+            <button class="activo" data-seccion="secCapas"><i class="fa-solid fa-layer-group"></i> Capas</button>
+            <button data-seccion="secLeyenda"><i class="fa-solid fa-list"></i> Leyenda</button>
+            <button data-seccion="secVista"><i class="fa-solid fa-sliders"></i> Vista</button>
+        </div>
+
+        <div class="cuerpo">
+            <!-- CAPAS -->
+            <div class="seccion activa" id="secCapas">
+                <div id="listaCapas"></div>
+                <p class="ayuda">Las capas se cargan al encenderlas. Las más pesadas
+                    (pendiente, uso del suelo, aptitud) pueden tardar unos segundos.</p>
+            </div>
+
+            <!-- LEYENDA -->
+            <div class="seccion" id="secLeyenda">
+                <div id="leyenda"></div>
+            </div>
+
+            <!-- VISTA -->
+            <div class="seccion" id="secVista">
+                <div class="titulo">Mapa base</div>
+                <div class="opciones" id="opcionesBase">
+                    <button data-base="osm" class="activo"><i class="fa-solid fa-map"></i> Calles</button>
+                    <button data-base="satelite"><i class="fa-solid fa-satellite"></i> Satélite</button>
+                </div>
+
+                <div class="titulo">Exageración del relieve</div>
+                <div class="deslizador">
+                    <input type="range" id="exageracion" min="1" max="3" step="0.1" value="1.5">
+                    <span id="valorExageracion">1,5×</span>
+                </div>
+
+                <div class="titulo">Altura de las columnas de densidad</div>
+                <div class="deslizador">
+                    <input type="range" id="alturaColumnas" min="100" max="1500" step="50" value="600">
+                    <span id="valorAltura">600 m</span>
+                </div>
+
+                <div class="titulo">Recorrido</div>
+                <button class="boton" id="btnTren"><i class="fa-solid fa-play"></i> Mover el tren</button>
+                <button class="boton" id="btnSobrevolar"><i class="fa-solid fa-plane"></i> Sobrevolar el corredor</button>
+                <button class="boton secundario" id="btnVista"><i class="fa-solid fa-expand"></i> Vista general</button>
+
+                <p class="ayuda">Arrastre con clic derecho (o Ctrl + arrastrar) para inclinar y girar el mapa.
+                    Haga clic en una estación para ver su altitud aproximada.<br>
+                    Relieve: modelo digital de elevación global (Terrain Tiles, AWS).</p>
+            </div>
+        </div>
+    </aside>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <!-- Turf: tren sobre el corredor y áreas de influencia -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <script>
+    /* ============================================================
+       VISTA 3D · TRANVÍA URBANO ARMENIA
+       Usa los mismos archivos de data/ y las mismas clasificaciones
+       y colores del geovisor 2D (script.js).
+       ============================================================ */
+
+    const RUTA_DATOS = 'data/';
+    const EXAGERACION_INICIAL = 1.5;
+    let ALTO_MAX_COLUMNAS = 600;          // altura (m) de la columna de mayor densidad
+
+    // Modelo de elevación libre (formato Terrarium), sin clave ni cuenta
+    const URL_DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+
+    /* ---------- Código compartido con el geovisor 2D (copiado de script.js) ---------- */
+    // Tabla 1 del informe · Densidad poblacional por comuna (proyección 2025)
+    const COMUNAS = [
+        { n: 1,  nombre: 'Centenario',                     hab: 39383, dens: 7414  },
+        { n: 2,  nombre: 'Rufino José Cuervo',             hab: 59420, dens: 18609 },
+        { n: 3,  nombre: 'Alfonso López',                  hab: 39736, dens: 16557 },
+        { n: 4,  nombre: 'Francisco de Paula Santander',   hab: 13159, dens: 7112  },
+        { n: 5,  nombre: 'El Bosque',                      hab: 19720, dens: 15197 },
+        { n: 6,  nombre: 'San José',                       hab: 43726, dens: 16212 },
+        { n: 7,  nombre: 'El Cafetero',                    hab: 17830, dens: 7114  },
+        { n: 8,  nombre: 'Libertadores',                   hab: 12115, dens: 11065 },
+        { n: 9,  nombre: 'Fundadores',                     hab: 16645, dens: 11489 },
+        { n: 10, nombre: 'Quimbaya',                       hab: 62935, dens: 6322  }
+    ];
+
+    /* ---------- Utilidades ---------- */
+
+    // Quita tildes y pasa a minúsculas: "Rufino José" → "rufino jose"
+    function normalizar(texto) {
+        return String(texto ?? '')
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toLowerCase().trim();
+    }
+
+    // Lee un atributo sin importar mayúsculas: campo(props, ['NOMBRE','name'])
+    function campo(props, nombres) {
+        if (!props) return undefined;
+        const claves = Object.keys(props);
+        for (const n of nombres) {
+            const k = claves.find(c => c.toLowerCase() === n.toLowerCase());
+            if (k !== undefined && props[k] !== null && props[k] !== '') return props[k];
+        }
+        return undefined;
+    }
+
+    // Evita que un texto de los datos se interprete como HTML
+    function esc(texto) {
+        return String(texto ?? '').replace(/[&<>"']/g, c =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    const num = (v, dec = 0) => Number(v).toLocaleString('es-CO',
+        { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+    // Plantilla común de las ventanas emergentes
+    function popupHTML(titulo, subtitulo, filas, nota) {
+        const cuerpo = filas
+            .filter(f => f[1] !== undefined && f[1] !== null && f[1] !== '')
+            .map(f => `<tr><td>${esc(f[0])}</td><td>${f[1]}</td></tr>`).join('');
+        return `
+            <div class="popup-cabecera">${esc(titulo)}<small>${esc(subtitulo)}</small></div>
+            <div class="popup-cuerpo">
+                <table>${cuerpo}</table>
+                ${nota ? `<p class="nota mb-0">${nota}</p>` : ''}
+            </div>`;
+    }
+
+    /* ---------- Funciones de clasificación ---------- */
+
+    // Busca la comuna de un polígono por nombre o por número
+    function datosComuna(props) {
+        if (!props) return null;
+        for (const [clave, valor] of Object.entries(props)) {
+            const t = normalizar(valor);
+            const c = COMUNAS.find(c => t && (t === normalizar(c.nombre) || t.endsWith(normalizar(c.nombre))));
+            if (c) return c;
+            if (/comuna|cod|num|id_c/i.test(clave)) {
+                const n = parseInt(valor, 10);
+                const porNumero = COMUNAS.find(c => c.n === n);
+                if (porNumero) return porNumero;
+            }
+        }
+        return null;
+    }
+
+    function nombreComuna(props) {
+        const d = datosComuna(props);
+        return d ? d.nombre : (campo(props, ['NOMBRE', 'NOM_COMUNA', 'COMUNA', 'name']) || 'Comuna');
+    }
+
+    // Clases 1-2-3 (raster reclasificado y convertido a polígonos: campo gridcode)
+    function clase123(props, camposTexto) {
+        const v = campo(props, ['gridcode', 'CLASE', 'VALUE', ...camposTexto]);
+        const t = normalizar(v);
+        if (t === '1' || t.includes('baja')) return 'c1';
+        if (t === '2' || t.includes('media') || t.includes('moder')) return 'c2';
+        if (t === '3' || t.includes('alta')) return 'c3';
+        return 'otro';
+    }
+
+    /* ---------- Pendiente: escala de 7 clases (a – g) ---------- */
+    const CLASES_PENDIENTE = {
+        a: { rango: '0 – 3 %',    max: 3,        color: '#5a9e32', descripcion: 'A nivel / casi nivel' },
+        b: { rango: '3 – 5 %',    max: 5,        color: '#8dc63f', descripcion: 'Ligeramente inclinada / ligeramente ondulada' },
+        c: { rango: '5 – 12 %',   max: 12,       color: '#c4df5b', descripcion: 'Moderadamente inclinada / moderadamente ondulada' },
+        d: { rango: '12 – 25 %',  max: 25,       color: '#ffff55', descripcion: 'Fuertemente inclinada / fuertemente ondulada / moderadamente quebrada' },
+        e: { rango: '25 – 50 %',  max: 50,       color: '#f7b347', descripcion: 'Fuertemente quebrada / ligeramente escarpada' },
+        f: { rango: '50 – 75 %',  max: 75,       color: '#ee6b30', descripcion: 'Moderadamente escarpada' },
+        g: { rango: '75 – 100 %', max: Infinity, color: '#e03a2a', descripcion: 'Fuertemente escarpada (incluye escarpes subverticales y verticales)' }
+    };
+    Object.entries(CLASES_PENDIENTE).forEach(([k, c]) => c.etiqueta = `${k} · ${c.rango} · ${c.descripcion}`);
+
+    CLASES_PENDIENTE.otro = { etiqueta: 'Sin clasificar', color: '#cfd8dc', rango: '—', descripcion: 'Sin clasificar' };
+
+    /* Clasifica cada polígono de data/pendiente.geojson. Acepta:
+       - un campo con la pendiente en %  (PENDIENTE, SLOPE, PEND_PCT)
+       - un campo con la clase 1 a 7     (gridcode, CLASE, VALUE)  → 1 = a … 7 = g
+       - un campo con la letra a – g     (SIMBOLO, CLASE)                        */
+    function clasificarPendiente(props) {
+        const pct = campo(props, ['PENDIENTE', 'SLOPE', 'PEND_PCT']);
+        if (pct !== undefined && !isNaN(Number(pct))) {
+            const v = Number(pct);
+            return Object.keys(CLASES_PENDIENTE).find(k => k !== 'otro' && v <= CLASES_PENDIENTE[k].max);
+        }
+        const letra = normalizar(campo(props, ['SIMBOLO', 'CLASE', 'gridcode', 'VALUE']));
+        if (/^[a-g]$/.test(letra)) return letra;
+        const n = parseInt(letra, 10);
+        if (n >= 1 && n <= 7) return 'abcdefg'[n - 1];
+        return 'otro';
+    }
+
+    /* ---------- Uso del suelo (tejidos urbanos) ---------- */
+    function clasificarUsoSuelo(props) {
+        // Solo se usa la columna "Uso_su" de la tabla de atributos
+        const t = normalizar(campo(props, ['Uso_su']));
+        if (/paisaj/.test(t)) return 'paisajistico';
+        if (/\buas\b/.test(t)) return 'uas';
+        if (/central/.test(t)) return 'central';
+        if (/empresarial|comerc/.test(t)) return 'empresarial';
+        if (/industr/.test(t)) return 'industrial';
+        if (/residen/.test(t)) return 'residencial';
+        return 'otro';
+    }
+
+    // Color para valores de "Uso_su" que no encajan en ninguna categoría conocida:
+    // cada valor distinto recibe su propio color (siempre el mismo para el mismo texto).
+    const PALETA_USOS = ['#e57373', '#64b5f6', '#81c784', '#ffb74d', '#ba68c8', '#4db6ac',
+        '#f06292', '#a1887f', '#90a4ae', '#dce775', '#7986cb', '#ff8a65'];
+    function colorOtroUso(texto) {
+        const t = normalizar(texto);
+        let h = 0;
+        for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+        return PALETA_USOS[h % PALETA_USOS.length];
+    }
+
+    function clasificarVia(props) {
+        const t = normalizar(campo(props, ['JERARQUIA', 'highway', 'TIPO', 'CLASE', 'fclass']));
+        if (t.includes('trunk') || t.includes('primar') || t.includes('arteria')) return 'primaria';
+        if (t.includes('secund') || t.includes('secondary')) return 'secundaria';
+        if (t.includes('terci') || t.includes('tertiary')) return 'terciaria';
+        return 'otro';
+    }
+
+    /* ---------- Equipamientos ----------
+       Se revisan el tipo y el nombre. El orden importa: por ejemplo,
+       "Universidad" se revisa antes que "Colegio".                        */
+    function clasificarTexto(t) {
+        if (!t) return 'otro';
+        if (/justicia|courthouse|juzgado|tribunal|fiscal|procuradur|defensor/.test(t)) return 'justicia';
+        if (/contralor|dane\b|estadistica|migracion|registradur|notaria|dian\b|ministerio|gobernaci|alcald|townhall|government|gobierno|secretar|camara de comercio|consumidor|superintendencia|entidad|oficina|administrativ/.test(t)) return 'entidad';
+        if (/muse/.test(t)) return 'museo';
+        if (/universi|college|catolica|politecnico|sena\b|tecnologic/.test(t)) return 'universidad';
+        if (/hospital|clinic|salud|health|doctor|\beps\b|\bips\b|especialista|asmet|medic|laboratorio|odontolog|oftalm|\bevl\b|vision/.test(t)) return 'hospital';
+        if (/colegio|escuela|school|kindergarten|educa|institut|jardin infantil|liceo|gimnasio/.test(t)) return 'colegio';
+        if (/cultur|biblioteca|library|teatro|theatre|arts_centre|community_centre|auditorio|casa de la cultura/.test(t)) return 'cultural';
+        if (/deport|sports|stadium|estadio|coliseo|cancha|pitch|polideport|piscina|gimnasio/.test(t)) return 'deporte';
+        if (/parque|park|playground|plaza|plazoleta/.test(t)) return 'parque';
+        if (/iglesia|catedral|parroquia|templo|capilla|church/.test(t)) return 'iglesia';
+        if (/banco|bancol|davivienda|bbva|bank|cajero|corporacion|cooperativa/.test(t)) return 'banco';
+        if (/policia|cai\b|estacion de policia|ejercito|batallon|militar/.test(t)) return 'policia';
+        if (/bombero|defensa civil|cruz roja/.test(t)) return 'emergencia';
+        if (/terminal|transporte|bus\b|estacion de servicio|aeropuerto/.test(t)) return 'transporte';
+        if (/centro comercial|mall|almacen|supermercado|exito|olimpica|mercado|plaza de mercado|comercial|tienda/.test(t)) return 'comercio';
+        if (/hotel|hostal|hospedaje/.test(t)) return 'hotel';
+        if (/restaurante|cafe|cafeter/.test(t)) return 'restaurante';
+        return 'otro';
+    }
+    function clasificarEquipamiento(props) {
+        // Solo se usa la columna "Nombre" de la tabla de atributos
+        return clasificarTexto(normalizar(campo(props, ['Nombre'])));
+    }
+
+    /* ---------- Densidad poblacional ----------
+       Lee el valor de densidad de un campo del GeoJSON (DENSIDAD, DENS, DENS_POB…;
+       sirve cualquier campo numérico cuyo nombre contenga "dens").           */
+    const UNIDAD_DENSIDAD = 'hab/m²';
+
+    function valorDensidad(props) {
+        const v = campo(props, ['DENSIDAD', 'DENS', 'DENS_POB', 'DENSIDAD_P', 'DENSIDAD_POB', 'HAB_KM2']);
+        if (v !== undefined && !isNaN(Number(v))) return Number(v);
+        const clave = Object.keys(props || {}).find(k => /dens/i.test(k) && !isNaN(Number(props[k])) && props[k] !== null && props[k] !== '');
+        return clave ? Number(props[clave]) : null;
+    }
+
+    function clasificarDensidad(props) {
+        const v = valorDensidad(props);
+        if (v === null) return 'otro';
+        if (v <= 0.007) return 'd1';
+        if (v <= 0.024) return 'd2';
+        if (v <= 0.047) return 'd3';
+        if (v <= 0.104) return 'd4';
+        return 'd5';
+    }
+
+
+    function avisar(texto) {
+        const a = document.getElementById('aviso');
+        a.innerHTML = texto;
+        a.classList.add('visible');
+        setTimeout(() => a.classList.remove('visible'), 8000);
+    }
+
+    /* ============================================================
+       DEFINICIÓN DE CAPAS (mismos archivos y colores del 2D)
+       tipo: 'relleno' | 'linea' | 'columnas' | 'iconos'
+       ============================================================ */
+    const GRUPOS3D = {
+        area:          { nombre: 'Área de estudio',      icono: 'fa-map-location-dot' },
+        criterios:     { nombre: 'Criterios de aptitud', icono: 'fa-sliders' },
+        restricciones: { nombre: 'Restricciones',        icono: 'fa-ban' },
+        resultados:    { nombre: 'Resultados',           icono: 'fa-route' }
+    };
+
+    const CAPAS3D = [
+        {
+            id: 'perimetro', grupo: 'area', nombre: 'Perímetro urbano',
+            archivo: 'perimetro_urbano.geojson', visible: true, tipo: 'linea', sinRelleno: true,
+            color: '#1d2b24', ancho: 2.5, guiones: [3, 2],
+            leyenda: [{ tipo: 'linea', color: '#1d2b24', etiqueta: 'Límite urbano' }]
+        },
+        {
+            id: 'densidad', grupo: 'criterios', nombre: 'Densidad poblacional (3D)',
+            archivo: 'comunas.geojson', tipo: 'columnas', opacidad: 0.85, visible: true,
+            clasificar: p => clasificarDensidad(p),
+            categorias: {
+                d1: { etiqueta: `0,001 – 0,007 ${UNIDAD_DENSIDAD}`, color: '#fdeee2' },
+                d2: { etiqueta: `0,008 – 0,024 ${UNIDAD_DENSIDAD}`, color: '#f5c79a' },
+                d3: { etiqueta: `0,025 – 0,047 ${UNIDAD_DENSIDAD}`, color: '#e8956a' },
+                d4: { etiqueta: `0,048 – 0,104 ${UNIDAD_DENSIDAD}`, color: '#cc4b37' },
+                d5: { etiqueta: `0,105 – 0,304 ${UNIDAD_DENSIDAD}`, color: '#7a1212' },
+                otro: { etiqueta: 'Sin dato', color: '#cfd8dc' }
+            },
+            nota: 'Altura proporcional a la densidad',
+            popup: p => {
+                const v = valorDensidad(p);
+                return popupHTML(nombreComuna(p), 'Densidad poblacional', [
+                    ['Densidad', v === null ? '—' : `${num(v, 3)} ${UNIDAD_DENSIDAD}`]
+                ]);
+            }
+        },
+        {
+            id: 'uso_suelo', grupo: 'criterios', nombre: 'Uso del suelo',
+            archivo: 'uso_suelo.geojson', tipo: 'relleno', opacidad: 0.7,
+            clasificar: p => clasificarUsoSuelo(p),
+            leyendaPorCampo: 'Uso_su', colorOtro: colorOtroUso,
+            categorias: {
+                paisajistico: { etiqueta: 'Paisajístico',                   color: '#d4f08c' },
+                central:      { etiqueta: 'Tejido central',                 color: '#a88437' },
+                empresarial:  { etiqueta: 'Tejido empresarial y comercial', color: '#f2b33d' },
+                industrial:   { etiqueta: 'Tejido industrial',              color: '#c63bf0' },
+                residencial:  { etiqueta: 'Tejido residencial',             color: '#fff4c2' },
+                uas:          { etiqueta: 'UAS',                            color: '#4f8fb5' },
+                otro:         { etiqueta: 'Otros usos',                     color: '#cfd8dc' }
+            }
+        },
+        {
+            id: 'pendiente', grupo: 'criterios', nombre: 'Pendiente del terreno',
+            archivo: 'pendiente.geojson', tipo: 'relleno', opacidad: 0.7,
+            clasificar: p => clasificarPendiente(p),
+            categorias: CLASES_PENDIENTE
+        },
+        {
+            id: 'equipamientos', grupo: 'criterios', nombre: 'Equipamientos',
+            archivo: 'equipamientos.geojson', tipo: 'iconos',
+            clasificar: p => clasificarEquipamiento(p),
+            leyendaPorCampo: 'Nombre',
+            categorias: {
+                parque:      { etiqueta: 'Parques',             color: '#d4a106', icono: 'fa-tree' },
+                colegio:     { etiqueta: 'Colegios',            color: '#7b3fa0', icono: 'fa-school' },
+                universidad: { etiqueta: 'Universidad',         color: '#1f5fa8', icono: 'fa-graduation-cap' },
+                hospital:    { etiqueta: 'Hospitales',          color: '#d62728', icono: 'fa-hospital' },
+                cultural:    { etiqueta: 'Centros culturales',  color: '#c2185b', icono: 'fa-masks-theater' },
+                museo:       { etiqueta: 'Museos',              color: '#e67e22', icono: 'fa-landmark-dome' },
+                deporte:     { etiqueta: 'Centros de deporte',  color: '#2e9e5b', icono: 'fa-futbol' },
+                justicia:    { etiqueta: 'Palacio de justicia', color: '#455a9c', icono: 'fa-scale-balanced' },
+                gobernacion: { etiqueta: 'Gobernación',         color: '#0b6e8a', icono: 'fa-building-flag' },
+                entidad:     { etiqueta: 'Entidades públicas',  color: '#5d4037', icono: 'fa-building-columns' },
+                iglesia:     { etiqueta: 'Iglesias',            color: '#8e6bbf', icono: 'fa-church' },
+                banco:       { etiqueta: 'Bancos',              color: '#00796b', icono: 'fa-money-bill-wave' },
+                policia:     { etiqueta: 'Policía / Fuerza pública', color: '#1a237e', icono: 'fa-shield-halved' },
+                emergencia:  { etiqueta: 'Emergencias',         color: '#bf360c', icono: 'fa-truck-medical' },
+                transporte:  { etiqueta: 'Transporte',          color: '#37474f', icono: 'fa-bus' },
+                comercio:    { etiqueta: 'Comercio',            color: '#ef6c00', icono: 'fa-bag-shopping' },
+                hotel:       { etiqueta: 'Hoteles',             color: '#6a1b9a', icono: 'fa-hotel' },
+                restaurante: { etiqueta: 'Restaurantes',        color: '#a1472b', icono: 'fa-utensils' },
+                otro:        { etiqueta: 'Otros',               color: '#7f8c8d', icono: 'fa-building' }
+            }
+        },
+        {
+            id: 'jerarquia_vial', grupo: 'criterios', nombre: 'Jerarquía vial',
+            archivo: 'jerarquia_vial.geojson', tipo: 'linea',
+            clasificar: p => clasificarVia(p),
+            categorias: {
+                primaria:   { etiqueta: 'Vía primaria',   color: '#c0392b', grosor: 4 },
+                secundaria: { etiqueta: 'Vía secundaria', color: '#e67e22', grosor: 3 },
+                terciaria:  { etiqueta: 'Vía terciaria',  color: '#f1c40f', grosor: 2 },
+                otro:       { etiqueta: 'Otras vías',     color: '#95a5a6', grosor: 1 }
+            }
+        },
+        {
+            id: 'proteccion', grupo: 'restricciones', nombre: 'Áreas de protección ambiental',
+            archivo: 'areas_proteccion.geojson', tipo: 'relleno', opacidad: 0.45,
+            color: '#2e7d32', borde: '#1b5e20',
+            leyenda: [{ tipo: 'relleno', color: 'rgba(46,125,50,.45)', borde: '#1b5e20', etiqueta: 'Suelo de protección / SINAP' }]
+        },
+        {
+            id: 'rondas', grupo: 'restricciones', nombre: 'Rondas hídricas',
+            archivo: 'rondas_hidricas.geojson', tipo: 'relleno', opacidad: 0.55,
+            color: '#90caf9', borde: '#64b5f6',
+            leyenda: [{ tipo: 'relleno', color: '#90caf9', borde: '#64b5f6', etiqueta: 'Ronda hídrica' }]
+        },
+        {
+            id: 'hidrografia', grupo: 'restricciones', nombre: 'Cauces (hidrografía)',
+            archivo: 'hidrografia.geojson', tipo: 'linea', opacidad: 0.6,
+            color: '#1e88e5', ancho: 2,
+            leyenda: [{ tipo: 'linea', color: '#1e88e5', etiqueta: 'Cauce / drenaje' }]
+        },
+        {
+            id: 'aptitud', grupo: 'resultados', nombre: 'Aptitud territorial (WLC)',
+            archivo: 'aptitud.geojson', tipo: 'relleno', opacidad: 0.7, visible: true,
+            clasificar: p => clase123(p, ['APTITUD']),
+            categorias: {
+                c1: { etiqueta: 'Aptitud baja',  color: '#d73027' },
+                c2: { etiqueta: 'Aptitud media', color: '#fee08b' },
+                c3: { etiqueta: 'Aptitud alta',  color: '#1a9850' },
+                otro: { etiqueta: 'Sin clasificar', color: '#cfd8dc' }
+            }
+        },
+        {
+            id: 'buffer_1000', grupo: 'resultados', nombre: 'Área de influencia 1 km',
+            derivada: true, tipo: 'relleno', opacidad: 0.15, color: '#2e9e5b', borde: '#13693b',
+            leyenda: [{ tipo: 'relleno', color: 'rgba(46,158,91,.2)', borde: '#13693b', etiqueta: 'Radio 1 km' }]
+        },
+        {
+            id: 'buffer_500', grupo: 'resultados', nombre: 'Área de influencia 500 m',
+            derivada: true, tipo: 'relleno', opacidad: 0.25, color: '#f2b705', borde: '#b98900',
+            leyenda: [{ tipo: 'relleno', color: 'rgba(242,183,5,.35)', borde: '#b98900', etiqueta: 'Radio 500 m' }]
+        },
+        { id: 'corredor', grupo: 'resultados', nombre: 'Corredor potencial', especial: true, visible: true },
+        { id: 'estaciones', grupo: 'resultados', nombre: 'Estaciones propuestas', especial: true, visible: true }
+    ];
+
+    const capa3D = id => CAPAS3D.find(c => c.id === id);
+
+    /* ============================================================
+       MAPA CON RELIEVE
+       ============================================================ */
+    const mapa = new maplibregl.Map({
+        container: 'mapa3d',
+        style: {
+            version: 8,
+            sources: {
+                satelite: {
+                    type: 'raster',
+                    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+                    tileSize: 256, maxzoom: 19,
+                    attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics'
+                },
+                osm: {
+                    type: 'raster',
+                    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                    tileSize: 256, maxzoom: 19,
+                    attribution: '© OpenStreetMap'
+                },
+                relieve: {
+                    type: 'raster-dem', tiles: [URL_DEM], tileSize: 256,
+                    encoding: 'terrarium', maxzoom: 15,
+                    attribution: 'Relieve: Terrain Tiles (Mapzen / AWS)'
+                },
+                sombras: {
+                    type: 'raster-dem', tiles: [URL_DEM], tileSize: 256,
+                    encoding: 'terrarium', maxzoom: 15
+                }
+            },
+            layers: [
+                { id: 'satelite', type: 'raster', source: 'satelite', layout: { visibility: 'none' } },
+                { id: 'osm', type: 'raster', source: 'osm' },
+                {
+                    id: 'sombras', type: 'hillshade', source: 'sombras',
+                    paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#1d2b24' }
+                }
+            ],
+            terrain: { source: 'relieve', exaggeration: EXAGERACION_INICIAL }
+        },
+        center: [-75.68, 4.53],
+        zoom: 12.5,
+        pitch: 60,
+        bearing: -20,
+        maxPitch: 85
+    });
+
+    mapa.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+    mapa.addControl(new maplibregl.FullscreenControl(), 'top-right');
+    mapa.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+
+    /* ---------- Panel: pestañas y botón de ocultar ---------- */
+    document.querySelectorAll('.pestanas button').forEach(b => b.addEventListener('click', () => {
+        document.querySelectorAll('.pestanas button').forEach(x => x.classList.toggle('activo', x === b));
+        document.querySelectorAll('.seccion').forEach(s => s.classList.toggle('activa', s.id === b.dataset.seccion));
+    }));
+    document.getElementById('btnPanel').addEventListener('click', () =>
+        document.getElementById('panel').classList.toggle('cerrado'));
+    if (window.innerWidth <= 768) document.getElementById('panel').classList.add('cerrado');
+
+    /* ---------- Vista: mapa base, exageración y altura de columnas ---------- */
+    document.querySelectorAll('#opcionesBase button').forEach(b => {
+        b.addEventListener('click', () => {
+            const base = b.dataset.base;
+            ['satelite', 'osm'].forEach(id =>
+                mapa.setLayoutProperty(id, 'visibility', id === base ? 'visible' : 'none'));
+            document.querySelectorAll('#opcionesBase button').forEach(x => x.classList.toggle('activo', x === b));
+        });
+    });
+
+    const deslizador = document.getElementById('exageracion');
+    deslizador.addEventListener('input', () => {
+        const v = Number(deslizador.value);
+        mapa.setTerrain({ source: 'relieve', exaggeration: v });
+        document.getElementById('valorExageracion').textContent = num(v, 1) + '×';
+    });
+
+    const deslizadorAltura = document.getElementById('alturaColumnas');
+    deslizadorAltura.addEventListener('input', () => {
+        ALTO_MAX_COLUMNAS = Number(deslizadorAltura.value);
+        document.getElementById('valorAltura').textContent = num(ALTO_MAX_COLUMNAS) + ' m';
+        const c = capa3D('densidad');
+        if (c.cargada) { prepararDatos(c); mapa.getSource('capa-densidad').setData(c.datos); }
+    });
+
+    /* ============================================================
+       CARGA Y DIBUJO DE LAS CAPAS
+       ============================================================ */
+    async function leer(archivo) {
+        const r = await fetch(RUTA_DATOS + archivo);
+        if (!r.ok) throw new Error(`No se encontró data/${archivo}`);
+        return r.json();
+    }
+
+    // Pone en cada elemento su color, grosor y altura según la clasificación del 2D
+    function prepararDatos(capa) {
+        let maxDens = 0;
+        if (capa.tipo === 'columnas') {
+            capa.datos.features.forEach(f => { maxDens = Math.max(maxDens, valorDensidad(f.properties) || 0); });
+        }
+        capa.datos.features.forEach(f => {
+            const p = f.properties = f.properties || {};
+            let color = capa.color || '#888', grosor = capa.ancho || 2;
+            if (capa.clasificar) {
+                const k = capa.clasificar(p);
+                const cat = capa.categorias[k] || capa.categorias.otro;
+                const texto = capa.leyendaPorCampo ? campo(p, [capa.leyendaPorCampo]) : null;
+                color = (k === 'otro' && texto && capa.colorOtro) ? capa.colorOtro(texto) : cat.color;
+                grosor = cat.grosor || grosor;
+                p._clase = k;
+            }
+            p._color = color;
+            p._grosor = grosor;
+            p._borde = capa.borde || '#ffffff';
+            if (capa.tipo === 'columnas') {
+                const v = valorDensidad(p) || 0;
+                p._alto = maxDens ? v / maxDens * ALTO_MAX_COLUMNAS : 0;
+            }
+        });
+    }
+
+    const POLIGONOS = ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]];
+    const LINEAS = ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]];
+    const PUNTOS = ['in', ['geometry-type'], ['literal', ['Point', 'MultiPoint']]];
+
+    // Las capas temáticas se dibujan debajo del corredor
+    const debajoDe = () => mapa.getLayer('corredor-borde') ? 'corredor-borde' : undefined;
+
+    function dibujarCapa(capa) {
+        const fuente = 'capa-' + capa.id;
+        mapa.addSource(fuente, { type: 'geojson', data: capa.datos });
+        const op = capa.opacidad ?? 0.9;
+        capa.subcapas = [];
+
+        if (capa.tipo === 'iconos') {
+            crearIconos(capa);
+            return;
+        }
+        if (capa.tipo === 'columnas') {
+            mapa.addLayer({
+                id: fuente + '-columnas', type: 'fill-extrusion', source: fuente, filter: POLIGONOS,
+                paint: {
+                    'fill-extrusion-color': ['get', '_color'],
+                    'fill-extrusion-height': ['get', '_alto'],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-opacity': op
+                }
+            }, debajoDe());
+            capa.subcapas.push({ id: fuente + '-columnas', prop: 'fill-extrusion-opacity', base: op });
+            return;
+        }
+        // Polígonos: relleno + borde.
+        // sinRelleno (perímetro urbano): solo el contorno punteado, igual que en el 2D
+        if (capa.sinRelleno) {
+            const contorno = {
+                id: fuente + '-borde', type: 'line', source: fuente, filter: POLIGONOS,
+                layout: { 'line-join': 'round' },
+                paint: { 'line-color': ['get', '_color'], 'line-width': ['get', '_grosor'], 'line-opacity': 1 }
+            };
+            if (capa.guiones) contorno.paint['line-dasharray'] = capa.guiones;
+            mapa.addLayer(contorno, debajoDe());
+        } else {
+            mapa.addLayer({
+                id: fuente + '-relleno', type: 'fill', source: fuente, filter: POLIGONOS,
+                paint: { 'fill-color': ['get', '_color'], 'fill-opacity': op }
+            }, debajoDe());
+            mapa.addLayer({
+                id: fuente + '-borde', type: 'line', source: fuente, filter: POLIGONOS,
+                paint: { 'line-color': ['get', '_borde'], 'line-width': 0.6, 'line-opacity': Math.min(1, op + 0.3) }
+            }, debajoDe());
+        }
+        // Líneas
+        const linea = {
+            id: fuente + '-linea', type: 'line', source: fuente, filter: LINEAS,
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: { 'line-color': ['get', '_color'], 'line-width': ['get', '_grosor'], 'line-opacity': capa.tipo === 'linea' ? 1 : op }
+        };
+        if (capa.guiones) linea.paint['line-dasharray'] = capa.guiones;
+        mapa.addLayer(linea, debajoDe());
+        // Puntos sueltos
+        mapa.addLayer({
+            id: fuente + '-puntos', type: 'circle', source: fuente, filter: PUNTOS,
+            paint: { 'circle-color': ['get', '_color'], 'circle-radius': 5, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.2 }
+        }, debajoDe());
+
+        capa.subcapas.push(
+            ...(capa.sinRelleno ? [] : [{ id: fuente + '-relleno', prop: 'fill-opacity', base: op }]),
+            { id: fuente + '-borde', prop: 'line-opacity', base: capa.sinRelleno ? 1 : Math.min(1, op + 0.3) },
+            { id: fuente + '-linea', prop: 'line-opacity', base: capa.tipo === 'linea' ? 1 : op },
+            { id: fuente + '-puntos', prop: 'circle-opacity', base: 1 }
+        );
+    }
+
+    // Equipamientos: marcadores con su ícono, parados sobre el terreno
+    function crearIconos(capa) {
+        capa.marcadores = capa.datos.features.filter(f => f.geometry).map(f => {
+            const p = f.properties;
+            const punto = f.geometry.type === 'Point' ? f.geometry.coordinates : turf.centroid(f).geometry.coordinates;
+            const cat = capa.categorias[p._clase] || capa.categorias.otro;
+            const el = document.createElement('div');
+            el.className = 'icono-equipamiento';
+            el.style.background = cat.color;
+            el.innerHTML = `<i class="fa-solid ${cat.icono}"></i>`;
+            const nombre = campo(p, ['Nombre', 'NOMBRE', 'name']) || cat.etiqueta;
+            el.title = nombre;
+            const popup = new maplibregl.Popup({ offset: 14 }).setHTML(popupHTML(nombre, 'Equipamiento', [['Tipo', esc(cat.etiqueta)]]));
+            return new maplibregl.Marker({ element: el }).setLngLat(punto).setPopup(popup);
+        });
+    }
+
+    function mostrarCapa(capa, visible) {
+        capa.visibleAhora = visible;
+        document.getElementById('chk_' + capa.id).checked = visible;
+        if (capa.especial) {
+            if (capa.id === 'corredor') {
+                ['corredor-borde', 'corredor-centro'].forEach(id => mapa.getLayer(id) &&
+                    mapa.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none'));
+                if (marcadorTren) marcadorTren.getElement().style.display = visible ? '' : 'none';
+            }
+            if (capa.id === 'estaciones') marcadoresEstaciones.forEach(m => visible ? m.addTo(mapa) : m.remove());
+        } else if (capa.tipo === 'iconos') {
+            (capa.marcadores || []).forEach(m => visible ? m.addTo(mapa) : m.remove());
+        } else {
+            (capa.subcapas || []).forEach(s => mapa.setLayoutProperty(s.id, 'visibility', visible ? 'visible' : 'none'));
+        }
+        actualizarLeyenda();
+    }
+
+    function cambiarOpacidad(capa, valor) {
+        if (capa.tipo === 'iconos') {
+            (capa.marcadores || []).forEach(m => m.getElement().style.opacity = valor);
+        } else {
+            (capa.subcapas || []).forEach(s => mapa.setPaintProperty(s.id, s.prop, s.base * valor));
+        }
+    }
+
+    async function encender(capa) {
+        if (capa.especial || capa.cargada) { mostrarCapa(capa, true); return; }
+        const estado = document.getElementById('est_' + capa.id);
+        estado.textContent = 'cargando…';
+        estado.style.display = '';
+        try {
+            if (capa.derivada) {
+                if (!estacionesOrdenadas.length) throw new Error('Requiere data/estaciones.geojson');
+                const radio = capa.id === 'buffer_500' ? 0.5 : 1;
+                capa.datos = turf.featureCollection(estacionesOrdenadas.map(f =>
+                    turf.buffer(f, radio, { units: 'kilometers', steps: 48 })));
+            } else {
+                capa.datos = await leer(capa.archivo);
+            }
+            prepararDatos(capa);
+            dibujarCapa(capa);
+            capa.cargada = true;
+            estado.style.display = 'none';
+            mostrarCapa(capa, true);
+            const op = document.getElementById('op_' + capa.id);
+            if (op) cambiarOpacidad(capa, op.value / 100);
+        } catch (e) {
+            estado.textContent = 'sin datos';
+            estado.classList.add('error');
+            estado.title = location.protocol === 'file:' ? 'Abra el proyecto con Live Server' : e.message;
+            document.getElementById('chk_' + capa.id).checked = false;
+        }
+    }
+
+    /* ---------- Panel de capas ---------- */
+    function construirPanelCapas() {
+        const cont = document.getElementById('listaCapas');
+        Object.entries(GRUPOS3D).forEach(([idGrupo, g]) => {
+            const capas = CAPAS3D.filter(c => c.grupo === idGrupo);
+            const grupo = document.createElement('div');
+            grupo.className = 'grupo';
+            grupo.innerHTML = `
+                <button class="grupo-titulo" type="button">
+                    <i class="fa-solid ${g.icono}"></i>${g.nombre}<i class="fa-solid fa-chevron-down flecha"></i>
+                </button>
+                <div class="grupo-contenido">
+                    ${capas.map(c => `
+                        <div class="capa">
+                            <div class="capa-fila">
+                                <input type="checkbox" id="chk_${c.id}">
+                                <label for="chk_${c.id}">${c.nombre}</label>
+                                <span class="estado" id="est_${c.id}" style="display:none"></span>
+                            </div>
+                            ${c.especial ? '' : `
+                            <div class="deslizador">
+                                <input type="range" min="0" max="100" value="100" id="op_${c.id}" title="Opacidad">
+                                <span id="opv_${c.id}">100 %</span>
+                            </div>`}
+                        </div>`).join('')}
+                </div>`;
+            cont.appendChild(grupo);
+            const titulo = grupo.querySelector('.grupo-titulo');
+            titulo.addEventListener('click', () => {
+                titulo.classList.toggle('colapsado');
+                grupo.querySelector('.grupo-contenido').classList.toggle('oculto');
+            });
+        });
+
+        CAPAS3D.forEach(c => {
+            document.getElementById('chk_' + c.id).addEventListener('change', e => {
+                if (e.target.checked) encender(c);
+                else if (c.cargada || c.especial) mostrarCapa(c, false);
+            });
+            const op = document.getElementById('op_' + c.id);
+            if (op) op.addEventListener('input', () => {
+                document.getElementById('opv_' + c.id).textContent = op.value + ' %';
+                if (c.cargada) cambiarOpacidad(c, op.value / 100);
+            });
+        });
+    }
+
+    /* ---------- Leyenda de las capas encendidas ---------- */
+    function simbolo(item) {
+        if (item.tipo === 'linea') return `<span class="simbolo linea" style="border-top-color:${item.color};border-top-width:${item.grosor || 3}px"></span>`;
+        if (item.tipo === 'icono') return `<span class="icono-equipamiento" style="background:${item.color};cursor:default"><i class="fa-solid ${item.icono}"></i></span>`;
+        if (item.tipo === 'columna') return `<span class="simbolo columna" style="background:${item.color}"></span>`;
+        return `<span class="simbolo" style="background:${item.color};border-color:${item.borde || 'rgba(0,0,0,.25)'}"></span>`;
+    }
+
+    function itemsLeyenda(capa) {
+        if (!capa.clasificar) return capa.leyenda || [];
+        const tipo = capa.tipo === 'iconos' ? 'icono' : capa.tipo === 'columnas' ? 'columna' : capa.tipo === 'linea' ? 'linea' : 'relleno';
+        const vistos = new Map();
+        capa.datos.features.forEach(f => {
+            const p = f.properties;
+            const cat = capa.categorias[p._clase] || capa.categorias.otro;
+            const texto = capa.leyendaPorCampo ? String(campo(p, [capa.leyendaPorCampo]) ?? '').trim() : '';
+            const etiqueta = texto || cat.etiqueta;
+            const clave = capa.leyendaPorCampo ? normalizar(etiqueta) : p._clase;
+            if (!vistos.has(clave)) vistos.set(clave, { tipo, color: p._color, grosor: cat.grosor, icono: cat.icono, etiqueta, orden: Object.keys(capa.categorias).indexOf(p._clase) });
+        });
+        const lista = [...vistos.values()];
+        return capa.leyendaPorCampo
+            ? lista.sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, 'es'))
+            : lista.sort((a, b) => a.orden - b.orden);
+    }
+
+    function actualizarLeyenda() {
+        const cont = document.getElementById('leyenda');
+        const bloques = [];
+        if (capa3D('corredor').visibleAhora) {
+            bloques.push(`<div class="leyenda-bloque"><h6>Corredor potencial</h6>
+                <div class="leyenda-item"><span class="linea-corredor"></span>Corredor de menor costo</div>
+                <div class="leyenda-item"><img src="img/tren.png" class="tren3d" alt="">Tranvía en recorrido</div></div>`);
+        }
+        if (capa3D('estaciones').visibleAhora) {
+            bloques.push(`<div class="leyenda-bloque"><h6>Estaciones propuestas</h6>
+                <div class="leyenda-item"><span class="estacion3d">1</span>Numeradas de sur a norte</div></div>`);
+        }
+        CAPAS3D.filter(c => !c.especial && c.cargada && c.visibleAhora).forEach(c => {
+            bloques.push(`<div class="leyenda-bloque"><h6>${c.nombre}${c.nota ? ` <small>· ${c.nota}</small>` : ''}</h6>
+                ${itemsLeyenda(c).map(i => `<div class="leyenda-item">${simbolo(i)}${esc(i.etiqueta)}</div>`).join('')}</div>`);
+        });
+        cont.innerHTML = bloques.length ? bloques.join('') : '<div class="vacia">No hay capas encendidas</div>';
+    }
+
+    /* ---------- Ventanas al hacer clic sobre una capa ---------- */
+    mapa.on('click', e => {
+        if (e.originalEvent && e.originalEvent.target.closest && e.originalEvent.target.closest('.maplibregl-marker')) return;
+        const ids = CAPAS3D.filter(c => c.cargada && c.visibleAhora && c.subcapas)
+            .flatMap(c => c.subcapas.map(s => s.id))
+            .filter(id => mapa.getLayer(id));
+        if (!ids.length) return;
+        const f = mapa.queryRenderedFeatures(e.point, { layers: ids })[0];
+        if (!f) return;
+        const capa = capa3D(f.layer.id.replace(/^capa-/, '').replace(/-(relleno|borde|linea|puntos|columnas)$/, ''));
+        if (!capa) return;
+        let html;
+        if (capa.popup) html = capa.popup(f.properties);
+        else {
+            const cat = capa.categorias ? (capa.categorias[f.properties._clase] || {}).etiqueta : null;
+            const texto = capa.leyendaPorCampo ? campo(f.properties, [capa.leyendaPorCampo]) : null;
+            html = popupHTML(texto || cat || capa.nombre, capa.nombre, cat ? [['Clase', esc(cat)]] : []);
+        }
+        new maplibregl.Popup({ offset: 6 }).setLngLat(e.lngLat).setHTML(html).addTo(mapa);
+    });
+
+    mapa.on('mousemove', e => {
+        const ids = CAPAS3D.filter(c => c.cargada && c.visibleAhora && c.subcapas)
+            .flatMap(c => c.subcapas.map(s => s.id)).filter(id => mapa.getLayer(id));
+        const hay = ids.length && mapa.queryRenderedFeatures(e.point, { layers: ids }).length;
+        mapa.getCanvas().style.cursor = hay ? 'pointer' : '';
+    });
+
+    /* ============================================================
+       ALTITUD DE UN PUNTO (lee el píxel del modelo de elevación)
+       ============================================================ */
+    const cacheTeselas = {};
+
+    function cargarTesela(z, x, y) {
+        const clave = `${z}/${x}/${y}`;
+        if (!cacheTeselas[clave]) {
+            cacheTeselas[clave] = new Promise((ok, falla) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    const c = document.createElement('canvas');
+                    c.width = c.height = 256;
+                    const ctx = c.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    ok(ctx.getImageData(0, 0, 256, 256).data);
+                };
+                img.onerror = falla;
+                img.src = URL_DEM.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+            });
+        }
+        return cacheTeselas[clave];
+    }
+
+    async function altitud(lng, lat) {
+        const z = 14, n = 2 ** z;
+        const xf = (lng + 180) / 360 * n;
+        const r = lat * Math.PI / 180;
+        const yf = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n;
+        const x = Math.floor(xf), y = Math.floor(yf);
+        const px = Math.min(255, Math.floor((xf - x) * 256));
+        const py = Math.min(255, Math.floor((yf - y) * 256));
+        const datos = await cargarTesela(z, x, y);
+        const i = (py * 256 + px) * 4;
+        return (datos[i] * 256 + datos[i + 1] + datos[i + 2] / 256) - 32768;   // fórmula Terrarium
+    }
+
+    /* ============================================================
+       CORREDOR Y ESTACIONES
+       ============================================================ */
+    function coordenadas(geo, salida = []) {
+        const recorrer = c => typeof c[0] === 'number' ? salida.push(c) : c.forEach(recorrer);
+        (geo.features || [geo]).forEach(f => f.geometry && recorrer(f.geometry.coordinates));
+        return salida;
+    }
+
+    let limites = null;
+    let estacionesOrdenadas = [];
+    const marcadoresEstaciones = [];
+
+    function vistaGeneral(duracion = 2000) {
+        if (!limites) return;
+        const cam = mapa.cameraForBounds(limites, { padding: 90 });
+        if (!cam) return;
+        mapa.flyTo({ center: cam.center, zoom: cam.zoom - 0.2, pitch: 62, bearing: -25, duration: duracion });
+    }
+
+    mapa.on('load', async () => {
+        construirPanelCapas();
+
+        if (location.protocol === 'file:') {
+            avisar('<i class="fa-solid fa-triangle-exclamation"></i> Abra el proyecto con <b>Live Server</b> para cargar las capas.');
+            return;
+        }
+
+        const faltan = [];
+
+        // --- Corredor ---
+        try {
+            const corredor = await leer('corredor.geojson');
+            mapa.addSource('corredor', { type: 'geojson', data: corredor });
+            mapa.addLayer({
+                id: 'corredor-borde', type: 'line', source: 'corredor',
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
+                paint: { 'line-color': '#0b4d2c', 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 5, 16, 12] }
+            });
+            mapa.addLayer({
+                id: 'corredor-centro', type: 'line', source: 'corredor',
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
+                paint: { 'line-color': '#f2b705', 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 2, 16, 4] }
+            });
+            const c = coordenadas(corredor);
+            if (c.length) limites = c.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(c[0], c[0]));
+            prepararLinea(corredor);
+        } catch { faltan.push('corredor.geojson'); }
+
+        // --- Estaciones (numeradas de sur a norte, igual que en el 2D) ---
+        try {
+            const estaciones = await leer('estaciones.geojson');
+            // Se numeran en el orden en que el tranvía pasa por ellas (de sur a norte
+            // siguiendo el corredor), igual que en el geovisor 2D
+            const abscisa = f => linea
+                ? turf.nearestPointOnLine(linea, f, { units: 'kilometers' }).properties.location
+                : f.geometry.coordinates[1];
+            estacionesOrdenadas = (estaciones.features || [])
+                .filter(f => f.geometry && f.geometry.type === 'Point')
+                .sort((a, b) => abscisa(a) - abscisa(b));
+
+            estacionesOrdenadas.forEach((f, k) => {
+                const numero = k + 1;
+                const [lng, lat] = f.geometry.coordinates;
+                const el = document.createElement('div');
+                el.className = 'estacion3d';
+                el.textContent = numero;
+                el.title = `Estación ${numero}`;
+
+                const popup = new maplibregl.Popup({ offset: 18 }).setHTML(
+                    popupHTML(`Estación ${numero}`, 'Estación propuesta (preliminar)',
+                        [['Altitud aprox.', `<span id="alt${numero}">calculando…</span>`]]));
+                popup.on('open', async () => {
+                    const celda = document.getElementById('alt' + numero);
+                    try { celda.textContent = `${num(await altitud(lng, lat))} m s.n.m.`; }
+                    catch { celda.textContent = 'no disponible'; }
+                });
+
+                marcadoresEstaciones.push(new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).setPopup(popup).addTo(mapa));
+                if (limites) limites.extend([lng, lat]);
+                else limites = new maplibregl.LngLatBounds([lng, lat], [lng, lat]);
+            });
+        } catch { faltan.push('estaciones.geojson'); }
+
+        crearTren();
+
+        // Capas encendidas al abrir
+        CAPAS3D.filter(c => c.visible).forEach(c => encender(c));
+        actualizarLeyenda();
+
+        if (faltan.length) {
+            avisar(`<i class="fa-solid fa-triangle-exclamation"></i> No se encontró: <b>data/${faltan.join('</b>, <b>data/')}</b>`);
+        }
+        vistaGeneral(2500);
+    });
+
+    document.getElementById('btnVista').addEventListener('click', () => { mapa.stop(); terminarVuelo(false); vistaGeneral(); });
+
+    /* ============================================================
+       TREN SOBRE EL RELIEVE
+       - Normalmente va y viene por el corredor, parando 1 s en cada estación.
+       - Al "Sobrevolar el corredor", sale del extremo sur y la cámara lo sigue
+         de cerca hasta el extremo norte.
+       ============================================================ */
+    const SEGUNDOS_POR_KM = 6;            // velocidad del tren: súbalo para que vaya más lento
+    const PAUSA_ESTACION_MS = 1000;       // tiempo detenido en cada estación (1000 = 1 s)
+    const DIST_MAX_ESTACION_KM = 0.15;    // estación a menos de 150 m de la línea = parada
+    const ZOOM_VUELO = 15.3;              // qué tan cerca va la cámara en el sobrevuelo
+    const INCLINACION_VUELO = 65;
+
+    let linea = null, largo = 0, marcadorTren = null;
+    // modo: 'pausa' (quieto) | 'ciclo' (va y viene) | 'espera' y 'vuelo' (sobrevuelo)
+    const tren = { modo: 'pausa', itinerario: [], cicloMs: 1, inicio: null, offset: 0, distancia: 0 };
+    let rumboCamara = null;
+
+    // Une las líneas del corredor en una sola, orientada de sur a norte
+    function prepararLinea(datos) {
+        let coords = [];
+        turf.flattenEach(datos, f => {
+            if (f.geometry && f.geometry.type === 'LineString') {
+                coords = coords.concat(coords.length ? f.geometry.coordinates.slice(1) : f.geometry.coordinates);
+            }
+        });
+        if (coords.length < 2) return;
+        if (coords[0][1] > coords[coords.length - 1][1]) coords.reverse();
+        linea = turf.lineString(coords);
+        largo = turf.length(linea, { units: 'kilometers' });
+    }
+
+    // Tramos de movimiento y pausas. soloIda = true para el sobrevuelo (sur → norte)
+    function armarItinerario(soloIda) {
+        const msPorKm = Math.max(SEGUNDOS_POR_KM * 1000, 15000 / largo);
+        const paradas = estacionesOrdenadas
+            .map(f => turf.nearestPointOnLine(linea, f, { units: 'kilometers' }))
+            .filter(p => p.properties.dist <= DIST_MAX_ESTACION_KM)
+            .map(p => p.properties.location);
+        const puntos = [0, ...paradas.filter(d => d > 0.01 && d < largo - 0.01).sort((a, b) => a - b), largo];
+        const ida = [];
+        for (let k = 0; k < puntos.length; k++) {
+            ida.push({ desde: puntos[k], hasta: puntos[k], ms: PAUSA_ESTACION_MS });
+            if (k < puntos.length - 1) {
+                ida.push({ desde: puntos[k], hasta: puntos[k + 1], ms: (puntos[k + 1] - puntos[k]) * msPorKm });
+            }
+        }
+        const vuelta = [...ida].reverse().map(t => ({ desde: t.hasta, hasta: t.desde, ms: t.ms }));
+        const tramos = soloIda ? ida.slice(1) : [...ida.slice(1), ...vuelta.slice(1)];
+        let t = 0;
+        tren.itinerario = tramos.map(tr => { const x = { ...tr, t0: t }; t += tr.ms; return x; });
+        tren.cicloMs = t || 1;
+        tren.inicio = null;
+    }
+
+    function distanciaEn(ms) {
+        if (tren.modo === 'espera') return 0;
+        const tc = tren.modo === 'vuelo' ? Math.min(ms, tren.cicloMs - 1) : ms % tren.cicloMs;
+        const tr = tren.itinerario.find(x => tc < x.t0 + x.ms) || tren.itinerario[tren.itinerario.length - 1];
+        const f = tr.ms ? (tc - tr.t0) / tr.ms : 1;
+        return tr.desde + (tr.hasta - tr.desde) * Math.min(Math.max(f, 0), 1);
+    }
+
+    // Momento del ciclo de ida y vuelta en que el tren pasa por una distancia (va hacia el norte)
+    function tiempoParaDistancia(d) {
+        const tr = tren.itinerario.find(x => x.hasta >= x.desde && d >= x.desde && d <= x.hasta && x.hasta > x.desde)
+                || tren.itinerario.find(x => x.desde === x.hasta && Math.abs(x.desde - d) < 1e-6);
+        if (!tr) return 0;
+        return tr.hasta > tr.desde ? tr.t0 + (d - tr.desde) / (tr.hasta - tr.desde) * tr.ms : tr.t0;
+    }
+
+    function crearTren() {
+        if (!linea) return;
+        const img = document.createElement('img');
+        img.src = 'img/tren.png';
+        img.className = 'tren3d';
+        img.alt = 'Tren';
+        // El tren arranca quieto en el extremo sur
+        marcadorTren = new maplibregl.Marker({ element: img }).setLngLat(linea.geometry.coordinates[0]).addTo(mapa);
+        armarItinerario(false);
+        requestAnimationFrame(paso);
+    }
+
+    // Gira poco a poco hacia el rumbo deseado (evita sacudidas de la cámara)
+    function suavizarRumbo(actual, objetivo, factor) {
+        const dif = ((objetivo - actual + 540) % 360) - 180;
+        return actual + dif * factor;
+    }
+
+    function paso(t) {
+        if (tren.modo === 'pausa') { requestAnimationFrame(paso); return; }   // quieto
+
+        if (tren.inicio === null) tren.inicio = t - tren.offset;
+        const ms = t - tren.inicio;
+
+        if (tren.modo === 'vuelo' && ms >= tren.cicloMs) terminarVuelo(true);
+        if (tren.modo === 'pausa') { requestAnimationFrame(paso); return; }
+
+        const d = distanciaEn(ms);
+        tren.distancia = d;
+        const pos = turf.along(linea, d, { units: 'kilometers' }).geometry.coordinates;
+        marcadorTren.setLngLat(pos);
+
+        // En el sobrevuelo la cámara sigue al tren mirando hacia donde avanza
+        if (tren.modo === 'vuelo') {
+            const desde = turf.along(linea, Math.max(d - 0.1, 0), { units: 'kilometers' });
+            const hasta = turf.along(linea, Math.min(d + 0.25, largo), { units: 'kilometers' });
+            const objetivo = turf.bearing(desde, hasta);
+            rumboCamara = rumboCamara === null ? objetivo : suavizarRumbo(rumboCamara, objetivo, 0.04);
+            mapa.jumpTo({ center: pos, bearing: rumboCamara, pitch: INCLINACION_VUELO, zoom: ZOOM_VUELO });
+        }
+        requestAnimationFrame(paso);
+    }
+
+    /* ---------- Botón "Mover el tren" (play / pausa) ---------- */
+    const btnTren = document.getElementById('btnTren');
+
+    function actualizarBotonTren() {
+        btnTren.innerHTML = tren.modo === 'ciclo'
+            ? '<i class="fa-solid fa-pause"></i> Detener el tren'
+            : '<i class="fa-solid fa-play"></i> Mover el tren';
+    }
+
+    btnTren.addEventListener('click', () => {
+        if (!marcadorTren || tren.modo === 'espera' || tren.modo === 'vuelo') return;
+        if (tren.modo === 'pausa') {
+            if (!capa3D('corredor').visibleAhora) mostrarCapa(capa3D('corredor'), true);
+            tren.modo = 'ciclo';
+            tren.inicio = null;                     // sigue desde donde quedó (tren.offset)
+        } else {
+            if (tren.inicio !== null) tren.offset = (performance.now() - tren.inicio) % tren.cicloMs;
+            tren.modo = 'pausa';
+        }
+        actualizarBotonTren();
+    });
+
+    /* ---------- Botón "Sobrevolar el corredor" ---------- */
+    const btnVolar = document.getElementById('btnSobrevolar');
+    const textoVolar = '<i class="fa-solid fa-plane"></i> Sobrevolar el corredor';
+
+    // Al terminar el sobrevuelo el tren queda quieto donde llegó
+    function terminarVuelo(volverAVistaGeneral) {
+        if (tren.modo !== 'espera' && tren.modo !== 'vuelo') return;
+        tren.modo = 'pausa';
+        armarItinerario(false);
+        tren.offset = tiempoParaDistancia(tren.distancia);
+        btnVolar.innerHTML = textoVolar;
+        actualizarBotonTren();
+        if (volverAVistaGeneral) vistaGeneral();
+    }
+
+    btnVolar.addEventListener('click', () => {
+        if (!linea || !marcadorTren) return;
+        if (tren.modo === 'espera' || tren.modo === 'vuelo') { mapa.stop(); terminarVuelo(false); return; }
+
+        // Si el corredor estaba apagado, se enciende para el sobrevuelo
+        if (!capa3D('corredor').visibleAhora) mostrarCapa(capa3D('corredor'), true);
+
+        // 1) El tren se ubica en el extremo sur mientras la cámara llega
+        tren.modo = 'espera';
+        tren.distancia = 0;
+        marcadorTren.setLngLat(linea.geometry.coordinates[0]);
+        actualizarBotonTren();
+        btnVolar.innerHTML = '<i class="fa-solid fa-stop"></i> Detener';
+        const inicio = linea.geometry.coordinates[0];
+        const rumboInicial = turf.bearing(inicio, turf.along(linea, Math.min(0.3, largo), { units: 'kilometers' }));
+        mapa.flyTo({ center: inicio, zoom: ZOOM_VUELO, pitch: INCLINACION_VUELO, bearing: rumboInicial, duration: 3000, essential: true });
+
+        // 2) Cuando la cámara llega, el tren arranca y la cámara lo sigue
+        mapa.once('moveend', () => {
+            if (tren.modo !== 'espera') return;
+            rumboCamara = rumboInicial;
+            armarItinerario(true);
+            tren.offset = 0;
+            tren.modo = 'vuelo';
+        });
+    });
+
+    // Si el usuario mueve el mapa con el mouse durante el sobrevuelo, se detiene
+    mapa.on('dragstart', () => { if (tren.modo === 'espera' || tren.modo === 'vuelo') terminarVuelo(false); });
+    </script>
+</body>
+
+</html>
